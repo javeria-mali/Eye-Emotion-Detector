@@ -3,6 +3,8 @@ import cv2
 import numpy as np
 import tensorflow as tf
 from PIL import Image
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
+import av
 
 # -----------------------------
 # Page Configuration
@@ -48,9 +50,7 @@ st.markdown(
 )
 
 st.markdown(
-    '<div class="subtitle">'
-    'Emotion Detection using CNN'
-    '</div>',
+    '<div class="subtitle">Emotion Detection using CNN</div>',
     unsafe_allow_html=True
 )
 
@@ -88,13 +88,13 @@ model = load_model()
 
 def predict_emotion(image):
 
-    # Convert PIL image to NumPy
+    # Convert image to NumPy
     image = np.array(image)
 
     # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
-    # Resize to 48x48
+    # Resize
     face = cv2.resize(gray, (48, 48))
 
     # Crop eye region
@@ -132,17 +132,84 @@ def predict_emotion(image):
 
     confidence = float(prediction[index]) * 100
 
-    return emotion_names[index], confidence, eye_region
+    return emotion_names[index], confidence
 
 
-# -----------------------------
-# Upload Image
-# -----------------------------
+# =====================================================
+# LIVE CAMERA
+# =====================================================
 
-st.subheader("📷 Upload an Image")
+st.subheader("📷 Live Camera")
 
 st.write(
-    "Upload a face image and the model will predict "
+    "Click START to open your webcam and detect emotions "
+    "in real time."
+)
+
+
+class EmotionProcessor(VideoProcessorBase):
+
+    def recv(self, frame):
+
+        img = frame.to_ndarray(format="bgr24")
+
+        # Convert BGR to RGB
+        rgb = cv2.cvtColor(
+            img,
+            cv2.COLOR_BGR2RGB
+        )
+
+        # Prediction
+        emotion, confidence = predict_emotion(rgb)
+
+        # Display emotion
+        cv2.putText(
+            img,
+            f"Emotion: {emotion}",
+            (20, 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.9,
+            (255, 255, 255),
+            2
+        )
+
+        # Display confidence
+        cv2.putText(
+            img,
+            f"Confidence: {confidence:.1f}%",
+            (20, 80),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2
+        )
+
+        return av.VideoFrame.from_ndarray(
+            img,
+            format="bgr24"
+        )
+
+
+webrtc_streamer(
+    key="emotion-detector",
+    video_processor_factory=EmotionProcessor,
+    media_stream_constraints={
+        "video": True,
+        "audio": False
+    }
+)
+
+
+# =====================================================
+# UPLOAD IMAGE
+# =====================================================
+
+st.markdown("---")
+
+st.subheader("📤 Upload an Image")
+
+st.write(
+    "Upload a face image and the CNN model will predict "
     "the emotion from the eye region."
 )
 
@@ -164,7 +231,7 @@ if uploaded_file is not None:
             use_container_width=True
         )
 
-    emotion, confidence, eye_region = predict_emotion(image)
+    emotion, confidence = predict_emotion(image)
 
     with col2:
         st.subheader("Prediction")
@@ -178,18 +245,10 @@ if uploaded_file is not None:
             f"{confidence:.1f}%"
         )
 
-        # Display processed eye region
-        eye_display = eye_region[0, :, :, 0]
 
-        st.image(
-            eye_display,
-            caption="Processed Eye Region",
-            use_container_width=True
-        )
-
-# -----------------------------
-# Supported Emotions
-# -----------------------------
+# =====================================================
+# SUPPORTED EMOTIONS
+# =====================================================
 
 st.markdown("---")
 
