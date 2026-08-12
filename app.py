@@ -2,8 +2,7 @@ import streamlit as st
 import cv2
 import numpy as np
 import tensorflow as tf
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
-import av
+from PIL import Image
 
 # -----------------------------
 # Page Configuration
@@ -21,7 +20,6 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-
 .stApp {
     background-color: #fff7fb;
 }
@@ -37,7 +35,6 @@ st.markdown("""
     color: #666;
     font-size: 18px;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -52,10 +49,12 @@ st.markdown(
 
 st.markdown(
     '<div class="subtitle">'
-    'Real-Time Emotion Detection using CNN'
+    'Emotion Detection using CNN'
     '</div>',
     unsafe_allow_html=True
 )
+
+st.markdown("---")
 
 # -----------------------------
 # Emotion Classes
@@ -77,7 +76,6 @@ emotion_names = [
 
 @st.cache_resource
 def load_model():
-
     return tf.keras.models.load_model(
         "models/eye_emotion_model.keras"
     )
@@ -85,26 +83,24 @@ def load_model():
 model = load_model()
 
 # -----------------------------
-# Emotion Prediction Function
+# Prediction Function
 # -----------------------------
 
-def predict_emotion(frame):
+def predict_emotion(image):
 
-    gray = cv2.cvtColor(
-        frame,
-        cv2.COLOR_BGR2GRAY
-    )
+    # Convert PIL image to NumPy
+    image = np.array(image)
 
-    # Resize exactly like training
-    face = cv2.resize(
-        gray,
-        (48, 48)
-    )
+    # Convert to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+
+    # Resize to 48x48
+    face = cv2.resize(gray, (48, 48))
 
     # Crop eye region
     eye_region = face[8:28, 4:44]
 
-    # Resize
+    # Resize eye region
     eye_region = cv2.resize(
         eye_region,
         (48, 24),
@@ -112,9 +108,7 @@ def predict_emotion(frame):
     )
 
     # Normalize
-    eye_region = (
-        eye_region.astype("float32") / 255.0
-    )
+    eye_region = eye_region.astype("float32") / 255.0
 
     # Add channel
     eye_region = np.expand_dims(
@@ -128,85 +122,73 @@ def predict_emotion(frame):
         axis=0
     )
 
+    # Prediction
     prediction = model.predict(
         eye_region,
         verbose=0
     )[0]
 
-    index = int(
-        np.argmax(prediction)
-    )
+    index = int(np.argmax(prediction))
 
-    confidence = (
-        float(prediction[index]) * 100
-    )
+    confidence = float(prediction[index]) * 100
 
-    return emotion_names[index], confidence
+    return emotion_names[index], confidence, eye_region
 
 
 # -----------------------------
-# Webcam Transformer
+# Upload Image
 # -----------------------------
 
-class EmotionTransformer(VideoTransformerBase):
-
-    def transform(self, frame):
-
-        img = frame.to_ndarray(
-            format="bgr24"
-        )
-
-        emotion, confidence = predict_emotion(
-            img
-        )
-
-        # Display emotion
-        cv2.putText(
-            img,
-            f"Emotion: {emotion}",
-            (20, 40),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1,
-            (255, 255, 255),
-            2
-        )
-
-        # Display confidence
-        cv2.putText(
-            img,
-            f"Confidence: {confidence:.1f}%",
-            (20, 80),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            (255, 255, 255),
-            2
-        )
-
-        return img
-
-
-# -----------------------------
-# Webcam Section
-# -----------------------------
-
-st.subheader("📷 Live Camera")
+st.subheader("📷 Upload an Image")
 
 st.write(
-    "Click START to open your webcam and "
-    "detect emotions in real time."
+    "Upload a face image and the model will predict "
+    "the emotion from the eye region."
 )
 
-webrtc_streamer(
-    key="emotion-detector",
-    video_transformer_factory=EmotionTransformer,
-    media_stream_constraints={
-        "video": True,
-        "audio": False
-    }
+uploaded_file = st.file_uploader(
+    "Choose an image",
+    type=["jpg", "jpeg", "png"]
 )
+
+if uploaded_file is not None:
+
+    image = Image.open(uploaded_file).convert("RGB")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.image(
+            image,
+            caption="Uploaded Image",
+            use_container_width=True
+        )
+
+    emotion, confidence, eye_region = predict_emotion(image)
+
+    with col2:
+        st.subheader("Prediction")
+
+        st.success(
+            f"Emotion: {emotion}"
+        )
+
+        st.metric(
+            "Confidence",
+            f"{confidence:.1f}%"
+        )
+
+        # Display processed eye region
+        eye_display = eye_region[0, :, :, 0]
+
+        st.image(
+            eye_display,
+            caption="Processed Eye Region",
+            use_container_width=True
+        )
 
 # -----------------------------
-# Information
+# Supported Emotions
 # -----------------------------
 
 st.markdown("---")
@@ -215,13 +197,10 @@ st.subheader("🧠 Supported Emotions")
 
 cols = st.columns(7)
 
-for col, emotion in zip(
-    cols,
-    emotion_names
-):
+for col, emotion in zip(cols, emotion_names):
     col.write(emotion)
 
 st.info(
-    "The model predicts emotions from the "
-    "eye-region of the camera image."
+    "The CNN model predicts one of seven emotions "
+    "from the processed eye-region image."
 )
