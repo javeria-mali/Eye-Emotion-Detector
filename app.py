@@ -1,7 +1,6 @@
 import streamlit as st
 import cv2
 import numpy as np
-import tensorflow as tf
 from PIL import Image
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
 import av
@@ -76,9 +75,13 @@ emotion_names = [
 
 @st.cache_resource
 def load_model():
+    # TensorFlow is loaded only when the model is needed
+    import tensorflow as tf
+
     return tf.keras.models.load_model(
         "models/eye_emotion_model.keras"
     )
+
 
 model = load_model()
 
@@ -92,10 +95,16 @@ def predict_emotion(image):
     image = np.array(image)
 
     # Convert to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    gray = cv2.cvtColor(
+        image,
+        cv2.COLOR_RGB2GRAY
+    )
 
     # Resize
-    face = cv2.resize(gray, (48, 48))
+    face = cv2.resize(
+        gray,
+        (48, 48)
+    )
 
     # Crop eye region
     eye_region = face[8:28, 4:44]
@@ -108,7 +117,9 @@ def predict_emotion(image):
     )
 
     # Normalize
-    eye_region = eye_region.astype("float32") / 255.0
+    eye_region = eye_region.astype(
+        "float32"
+    ) / 255.0
 
     # Add channel
     eye_region = np.expand_dims(
@@ -128,11 +139,18 @@ def predict_emotion(image):
         verbose=0
     )[0]
 
-    index = int(np.argmax(prediction))
+    index = int(
+        np.argmax(prediction)
+    )
 
-    confidence = float(prediction[index]) * 100
+    confidence = (
+        float(prediction[index]) * 100
+    )
 
-    return emotion_names[index], confidence
+    return (
+        emotion_names[index],
+        confidence
+    )
 
 
 # =====================================================
@@ -151,7 +169,9 @@ class EmotionProcessor(VideoProcessorBase):
 
     def recv(self, frame):
 
-        img = frame.to_ndarray(format="bgr24")
+        img = frame.to_ndarray(
+            format="bgr24"
+        )
 
         # Convert BGR to RGB
         rgb = cv2.cvtColor(
@@ -160,7 +180,9 @@ class EmotionProcessor(VideoProcessorBase):
         )
 
         # Prediction
-        emotion, confidence = predict_emotion(rgb)
+        emotion, confidence = predict_emotion(
+            rgb
+        )
 
         # Display emotion
         cv2.putText(
@@ -215,25 +237,35 @@ st.write(
 
 uploaded_file = st.file_uploader(
     "Choose an image",
-    type=["jpg", "jpeg", "png"]
+    type=[
+        "jpg",
+        "jpeg",
+        "png"
+    ]
 )
 
 if uploaded_file is not None:
 
-    image = Image.open(uploaded_file).convert("RGB")
+    image = Image.open(
+        uploaded_file
+    ).convert("RGB")
 
     col1, col2 = st.columns(2)
 
     with col1:
+
         st.image(
             image,
             caption="Uploaded Image",
             use_container_width=True
         )
 
-    emotion, confidence = predict_emotion(image)
+    emotion, confidence = predict_emotion(
+        image
+    )
 
     with col2:
+
         st.subheader("Prediction")
 
         st.success(
@@ -256,7 +288,10 @@ st.subheader("🧠 Supported Emotions")
 
 cols = st.columns(7)
 
-for col, emotion in zip(cols, emotion_names):
+for col, emotion in zip(
+    cols,
+    emotion_names
+):
     col.write(emotion)
 
 st.info(
